@@ -24,6 +24,7 @@ int main(void)
 
 	SetConfigFlags(FLAG_MSAA_4X_HINT);  // Enable Multi Sampling Anti Aliasing 4x (if available)
 	InitWindow(screenWidth, screenHeight, "Tranon-dolo 3D");
+	InitAudioDevice();
 
 	// Define the camera to look into our 3d world
 	Camera camera = { 0 };
@@ -47,12 +48,14 @@ int main(void)
 	UnloadImage(imMap);             // Unload image from RAM
 
 	Vector3 mapPosition = { -16.0f, 0.0f, -8.0f };  // Set model position
-	Vector3 startPos = (Vector3) { 0.2f, 0.2f, 0.2f }	; // Capsule model
+	Vector3 startPos = (Vector3) { 0.2f, 0.2f, 0.2f }; // Capsule model
 	Vector3 endPos = (Vector3) { 0.2f, 0.8f, 0.2f };
+
+	Music music = LoadMusicStream("resources/bg_music.mp3");
+	PlayMusicStream(music);
 
 	DisableCursor();                // Limit cursor to relative movement inside the window
 
- 
 	SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
 	//--------------------------------------------------------------------------------------
 
@@ -61,6 +64,7 @@ int main(void)
 	{
 		// Update
 		//----------------------------------------------------------------------------------
+		UpdateMusicStream(music);
 		Vector3 oldCamPos = camera.position;    // Store old camera position
 
 		UpdateCamera(&camera, CAMERA_FIRST_PERSON);
@@ -80,7 +84,6 @@ int main(void)
 		else if (playerCellY >= cubicmap.height) playerCellY = cubicmap.height - 1;
 
 		// Check map collisions using image data and player position
-		// TODO: Improvement: Just check player surrounding cells for collision
 		for (int y = 0; y < cubicmap.height; y++)
 		{
 			for (int x = 0; x < cubicmap.width; x++)
@@ -125,6 +128,8 @@ int main(void)
 	UnloadTexture(cubicmap);        // Unload cubicmap texture
 	UnloadTexture(texture);         // Unload map texture
 	UnloadModel(model);             // Unload map model
+	UnloadMusicStream(music);
+	CloseAudioDevice();
 
 	CloseWindow();                  // Close window and OpenGL context
 	//--------------------------------------------------------------------------------------
