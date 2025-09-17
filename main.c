@@ -1,17 +1,11 @@
 #include "raylib.h"
+#include "rcamera.h"
 #include "raymath.h"
 
-#include <stdlib.h>   // Required for: free()
+#include <stdio.h>
 
 // Declaration of all globals variables
-#define RLIGHTS_IMPLEMENTATION
-#include "rlights.h"
-
-#if defined(PLATFORM_DESKTOP)
-	#define GLSL_VERSION            330
-#else   // PLATFORM_ANDROID, PLATFORM_WEB
-	#define GLSL_VERSION            100
-#endif
+#define CAMERA_MOUSE_MOVE_SENSITIVITY	0.003f
 //------------------------------------------------------------------------------------
 // Program main entry point
 //------------------------------------------------------------------------------------
@@ -28,10 +22,10 @@ int main(void)
 
 	// Define the camera to look into our 3d world
 	Camera camera = { 0 };
-	camera.position = (Vector3){ 0.2f, 0.4f, 0.2f };    // Camera position
-	camera.target = (Vector3){ 0.185f, 0.4f, 0.0f };    // Camera looking at point
+	camera.position = (Vector3){ -12.0f, 0.6f, -7.3f };    // Camera position
+	camera.target = (Vector3){ -11.55f, 1.4f, 6.85f };    // Camera looking at point
 	camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
-	camera.fovy = 45.0f;                                // Camera field-of-view Y
+	camera.fovy = 30.0f;                                // Camera field-of-view Y
 	camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
 	Image imMap = LoadImage("resources/cubicmap.png");      // Load cubicmap image (RAM)
@@ -48,26 +42,96 @@ int main(void)
 	UnloadImage(imMap);             // Unload image from RAM
 
 	Vector3 mapPosition = { -16.0f, 0.0f, -8.0f };  // Set model position
-	Vector3 startPos = (Vector3) { 0.2f, 0.2f, 0.2f }; // Capsule model
-	Vector3 endPos = (Vector3) { 0.2f, 0.8f, 0.2f };
 
-	Music music = LoadMusicStream("resources/bg_music.mp3");
-	PlayMusicStream(music);
+	bool light = false;
+
+	Music bg_music = LoadMusicStream("resources/bg_music.mp3");
+	PlayMusicStream(bg_music);
+
+	Color  timerColor = WHITE;
+
+	Sound click = LoadSound("resources/click.ogg");
+	//Sound lev1 = LoadSound("resources/disclaimer1.mp3");
+	Sound lev1 = LoadSound("resources/ALALANA AVY AIZA.mp3");
+	//Sound lev2 = LoadSound("resources/disclaimer2.mp3");
+	Sound lev2 = LoadSound("resources/VONJEO.mp3");
 
 	DisableCursor();                // Limit cursor to relative movement inside the window
 
 	SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
 	//--------------------------------------------------------------------------------------
 
+	int decal = 0;
+
+	// Head Bobbing
+	float bobbingTimer = 0.0f;
+	float bobbingSpeed = 10.0f;
+	float bobbingAmount = 0.05f;
+
+	Vector3 baseCameraPos = camera.position;
+	
 	// Main game loop
 	while (!WindowShouldClose())    // Detect window close button or ESC key
 	{
+		float dt = GetFrameTime();
+		float cameraMoveSpeed = 1.5f * dt;
+		double elpst = GetTime();
+		int timer = 301 - (int)elpst;
+		int minute = timer / 60;
+		int seconde = timer % 60;
+		float dist1 = Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f});
+		float vol1 = 1 - (dist1 * 0.1);
+
 		// Update
 		//----------------------------------------------------------------------------------
-		UpdateMusicStream(music);
+		if ((int)elpst - decal == 10)
+		{
+			PlaySound(lev2);
+			decal += 10;
+		}
+		SetSoundVolume(lev2, vol1 + 0.5);
+		if (IsKeyPressed(KEY_L)) {
+			// printf("posx: %0.2f, posy: %0.2f, posz: %0.2f\n", camera.position.x, camera.position.y, camera.position.z);
+			// printf("distance: %i\n", (int)Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f}));
+			PlaySound(click);
+			if (light) light = false;
+			else light = true;
+		}
+		if ((int)elpst == 3) PlaySound(lev1);
+		if (minute <= 0)
+		{
+			if(seconde < 10)
+				timerColor = RED;
+			if (seconde <= 0)
+			{
+				minute = 0;
+				seconde = 0;
+			}
+		}
+
+		UpdateMusicStream(bg_music);
+		SetMusicVolume(bg_music, 0.2);
 		Vector3 oldCamPos = camera.position;    // Store old camera position
 
-		UpdateCamera(&camera, CAMERA_FIRST_PERSON);
+		if (IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D))
+		{
+			bobbingTimer += GetFrameTime() * bobbingSpeed;
+			camera.position.y = baseCameraPos.y + sinf(bobbingTimer) * bobbingAmount;
+		} else {
+			// Reset when stopped
+			bobbingTimer = 0;
+			camera.position.y = baseCameraPos.y;
+		}
+
+		// Keyboard support
+        if (IsKeyDown(KEY_W)) CameraMoveForward(&camera, cameraMoveSpeed, 1);
+        if (IsKeyDown(KEY_A)) CameraMoveRight(&camera, -cameraMoveSpeed, 1);
+        if (IsKeyDown(KEY_S)) CameraMoveForward(&camera, -cameraMoveSpeed, 1);
+        if (IsKeyDown(KEY_D)) CameraMoveRight(&camera, cameraMoveSpeed, 1);
+		// Mouse support
+		Vector2 mousePositionDelta = GetMouseDelta();
+		CameraYaw(&camera, -mousePositionDelta.x*CAMERA_MOUSE_MOVE_SENSITIVITY, 0);
+		CameraPitch(&camera, -mousePositionDelta.y*CAMERA_MOUSE_MOVE_SENSITIVITY, 1, 0, 0);
 
 		// Check player collision (we simplify to 2D collision detection)
 		Vector2 playerPos = { camera.position.x, camera.position.z };
@@ -106,15 +170,22 @@ int main(void)
 
 			BeginMode3D(camera);
 				DrawModel(model, mapPosition, 1.0f, WHITE);// Draw maze map
-				DrawCapsule(startPos, endPos, 0.2f, 16, 8, RED);
 			EndMode3D();
 
-			DrawTextureEx(cubicmap, (Vector2){ GetScreenWidth() - cubicmap.width*4.0f - 20, 20.0f }, 0.0f, 4.0f, WHITE);
-			DrawRectangleLines(GetScreenWidth() - cubicmap.width*4 - 20, 20, cubicmap.width*4, cubicmap.height*4, GREEN);
+			if (light) {
+				DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 200 });
+				DrawCircle(GetScreenWidth() / 2, GetScreenHeight(), 300, (Color) { 255, 244, 0, 15 });
+			}
+			else 
+				DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 240 });
+
+			DrawTextureEx(cubicmap, (Vector2){ GetScreenWidth() - cubicmap.width*4.0f - 20, 20.0f }, 0.0f, 4.0f, RED);
+			DrawRectangleLines(GetScreenWidth() - cubicmap.width*4 - 20, 20, cubicmap.width*4, cubicmap.height*4, DARKGREEN);
 
 			// Draw player position radar
-			DrawRectangle(GetScreenWidth() - cubicmap.width*4 - 20 + playerCellX*4, 20 + playerCellY*4, 4, 4, RED);
+			DrawRectangle(GetScreenWidth() - cubicmap.width*4 - 20 + playerCellX*4, 20 + playerCellY*4, 4, 4, YELLOW);
 
+			DrawText(TextFormat("%02i:%02i", minute, seconde), 2, GetScreenHeight() - 30, 30, timerColor);
 			DrawFPS(10, 10);
 
 		EndDrawing();
@@ -124,13 +195,15 @@ int main(void)
 	// De-Initialization
 	//--------------------------------------------------------------------------------------
 	UnloadImageColors(mapPixels);   // Unload color array
-
 	UnloadTexture(cubicmap);        // Unload cubicmap texture
 	UnloadTexture(texture);         // Unload map texture
 	UnloadModel(model);             // Unload map model
-	UnloadMusicStream(music);
-	CloseAudioDevice();
+	UnloadMusicStream(bg_music);
+	UnloadSound(click);
+	UnloadSound(lev1);
+	UnloadSound(lev2);
 
+	CloseAudioDevice();
 	CloseWindow();                  // Close window and OpenGL context
 	//--------------------------------------------------------------------------------------
 
