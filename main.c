@@ -6,6 +6,9 @@
 
 // Declaration of all globals variables
 #define CAMERA_MOUSE_MOVE_SENSITIVITY	0.003f
+
+static float volume_of(Camera camera, float x, float z);
+
 //------------------------------------------------------------------------------------
 // Program main entry point
 //------------------------------------------------------------------------------------
@@ -51,10 +54,11 @@ int main(void)
 	Color  timerColor = WHITE;
 
 	Sound click = LoadSound("resources/click.ogg");
-	//Sound lev1 = LoadSound("resources/disclaimer1.mp3");
 	Sound lev1 = LoadSound("resources/ALALANA AVY AIZA.mp3");
-	//Sound lev2 = LoadSound("resources/disclaimer2.mp3");
 	Sound lev2 = LoadSound("resources/VONJEO.mp3");
+	Sound lev3 = LoadSound("resources/MITADY HITSOAKA.mp3");
+	Sound pas = LoadSound("resources/pas.mp3");
+	Sound soupire = LoadSound("resources/MISEFOSEFO.mp3");
 
 	DisableCursor();                // Limit cursor to relative movement inside the window
 
@@ -69,27 +73,34 @@ int main(void)
 	float bobbingAmount = 0.05f;
 
 	Vector3 baseCameraPos = camera.position;
-	
+
+	static float movingTime = 0.0f;
+	static bool soupirePlayed = false;
+
 	// Main game loop
 	while (!WindowShouldClose())    // Detect window close button or ESC key
 	{
+		bool isMoving = IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D);
+
 		float dt = GetFrameTime();
 		float cameraMoveSpeed = 1.5f * dt;
 		double elpst = GetTime();
 		int timer = 301 - (int)elpst;
 		int minute = timer / 60;
 		int seconde = timer % 60;
-		float dist1 = Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f});
-		float vol1 = 1 - (dist1 * 0.1);
+		float vol1 = volume_of(camera, -2.7f, -4.6f);
+		float vol2 = volume_of(camera, 13.80f, -1.60f);
 
 		// Update
 		//----------------------------------------------------------------------------------
+		SetSoundVolume(lev2, vol1 + 0.5);
+		SetSoundVolume(lev3, vol2);
 		if ((int)elpst - decal == 10)
 		{
 			PlaySound(lev2);
+			PlaySound(lev3);
 			decal += 10;
 		}
-		SetSoundVolume(lev2, vol1 + 0.5);
 		if (IsKeyPressed(KEY_L)) {
 			// printf("posx: %0.2f, posy: %0.2f, posz: %0.2f\n", camera.position.x, camera.position.y, camera.position.z);
 			// printf("distance: %i\n", (int)Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f}));
@@ -113,15 +124,31 @@ int main(void)
 		SetMusicVolume(bg_music, 0.2);
 		Vector3 oldCamPos = camera.position;    // Store old camera position
 
-		if (IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D))
+		if (isMoving)
 		{
-			bobbingTimer += GetFrameTime() * bobbingSpeed;
+			movingTime += dt;
+			if (movingTime >= 5.0f && !soupirePlayed)
+			{
+				PlaySound(soupire);
+				soupirePlayed = true;
+			}
+			bobbingTimer += dt * bobbingSpeed;
 			camera.position.y = baseCameraPos.y + sinf(bobbingTimer) * bobbingAmount;
 		} else {
 			// Reset when stopped
+			movingTime = 0.0f;
+			soupirePlayed = false;
 			bobbingTimer = 0;
 			camera.position.y = baseCameraPos.y;
 		}
+
+		float stepAngleThreshold = 3.14f / 2;   // approx π/2
+		float currentPhase = fmodf(bobbingTimer, 2 * 3.14159f);
+		float prevPhase = 0;  // à stocker également dans une variable statique ou globale
+		SetSoundVolume(pas, 0.5);
+		if ((prevPhase < stepAngleThreshold) && (currentPhase >= stepAngleThreshold))
+			PlaySound(pas);
+		prevPhase = currentPhase;
 
 		// Keyboard support
         if (IsKeyDown(KEY_W)) CameraMoveForward(&camera, cameraMoveSpeed, 1);
@@ -202,10 +229,22 @@ int main(void)
 	UnloadSound(click);
 	UnloadSound(lev1);
 	UnloadSound(lev2);
+	UnloadSound(lev3);
+	UnloadSound(pas);
+	UnloadSound(soupire);
 
 	CloseAudioDevice();
 	CloseWindow();                  // Close window and OpenGL context
 	//--------------------------------------------------------------------------------------
 
 	return 0;
+}
+
+static float volume_of(Camera camera, float x, float z)
+{
+	float volume;
+	float dist = Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {x, z});
+	volume = 1 - (dist * 0.1);
+	if (volume < 0) volume = 0;
+	return (volume);
 }
