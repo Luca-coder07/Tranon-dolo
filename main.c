@@ -4,6 +4,11 @@
 
 #include <stdio.h>
 
+typedef enum {
+	MENU,
+	GAME
+} GameState;
+
 // Declaration of all globals variables
 #define CAMERA_MOUSE_MOVE_SENSITIVITY	0.003f
 
@@ -16,10 +21,12 @@ int main(void)
 {
 	// Initialization
 	//--------------------------------------------------------------------------------------
-	const int screenWidth = 800;
-	const int screenHeight = 450;
+	const int screenWidth = GetMonitorWidth(0);
+	const int screenHeight = GetMonitorHeight(0);
 
-	SetConfigFlags(FLAG_MSAA_4X_HINT);  // Enable Multi Sampling Anti Aliasing 4x (if available)
+	GameState currentState = MENU;
+
+	SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_FULLSCREEN_MODE);  // Enable Multi Sampling Anti Aliasing 4x (if available)
 	InitWindow(screenWidth, screenHeight, "Tranon-dolo 3D");
 	InitAudioDevice();
 
@@ -30,6 +37,9 @@ int main(void)
 	camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
 	camera.fovy = 30.0f;                                // Camera field-of-view Y
 	camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
+
+	Image menuImg = LoadImage("resources/screen.jpg");
+	Texture2D menuText = LoadTextureFromImage(menuImg);
 
 	Image imMap = LoadImage("resources/cubicmap.png");      // Load cubicmap image (RAM)
 	Texture2D cubicmap = LoadTextureFromImage(imMap);       // Convert image to texture to display (VRAM)
@@ -60,7 +70,6 @@ int main(void)
 	Sound pas = LoadSound("resources/pas.mp3");
 	Sound soupire = LoadSound("resources/MISEFOSEFO.mp3");
 
-	DisableCursor();                // Limit cursor to relative movement inside the window
 
 	SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
 	//--------------------------------------------------------------------------------------
@@ -77,148 +86,204 @@ int main(void)
 	static float movingTime = 0.0f;
 	static bool soupirePlayed = false;
 
+	bool on_start = true;
+
+	DisableCursor();
 	// Main game loop
 	while (!WindowShouldClose())    // Detect window close button or ESC key
 	{
-		bool isMoving = IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D);
-
-		float dt = GetFrameTime();
-		float cameraMoveSpeed = 1.5f * dt;
-		double elpst = GetTime();
-		int timer = 301 - (int)elpst;
-		int minute = timer / 60;
-		int seconde = timer % 60;
-		float vol1 = volume_of(camera, -2.7f, -4.6f);
-		float vol2 = volume_of(camera, 13.80f, -1.60f);
-
-		// Update
-		//----------------------------------------------------------------------------------
-		SetSoundVolume(lev2, vol1 + 0.5);
-		SetSoundVolume(lev3, vol2);
-		if ((int)elpst - decal == 10)
-		{
-			PlaySound(lev2);
-			PlaySound(lev3);
-			decal += 10;
-		}
-		if (IsKeyPressed(KEY_L)) {
-			// printf("posx: %0.2f, posy: %0.2f, posz: %0.2f\n", camera.position.x, camera.position.y, camera.position.z);
-			// printf("distance: %i\n", (int)Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f}));
-			PlaySound(click);
-			if (light) light = false;
-			else light = true;
-		}
-		if ((int)elpst == 3) PlaySound(lev1);
-		if (minute <= 0)
-		{
-			if(seconde < 10)
-				timerColor = RED;
-			if (seconde <= 0)
-			{
-				minute = 0;
-				seconde = 0;
-			}
-		}
-
 		UpdateMusicStream(bg_music);
 		SetMusicVolume(bg_music, 0.2);
-		Vector3 oldCamPos = camera.position;    // Store old camera position
+		float dt = GetFrameTime();
 
-		if (isMoving)
+		switch (currentState)
 		{
-			movingTime += dt;
-			if (movingTime >= 5.0f && !soupirePlayed)
+			case GAME:
 			{
-				PlaySound(soupire);
-				soupirePlayed = true;
-			}
-			bobbingTimer += dt * bobbingSpeed;
-			camera.position.y = baseCameraPos.y + sinf(bobbingTimer) * bobbingAmount;
-		} else {
-			// Reset when stopped
-			movingTime = 0.0f;
-			soupirePlayed = false;
-			bobbingTimer = 0;
-			camera.position.y = baseCameraPos.y;
-		}
+				// if (IsCursorOnScreen() == false) SetMousePosition(screenWidth / 2, screenHeight / 2);
+				bool isMoving = (IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D));
+				float cameraMoveSpeed = 1.5f * dt;
 
-		float stepAngleThreshold = 3.14f / 2;   // approx π/2
-		float currentPhase = fmodf(bobbingTimer, 2 * 3.14159f);
-		float prevPhase = 0;  // à stocker également dans une variable statique ou globale
-		SetSoundVolume(pas, 0.5);
-		if ((prevPhase < stepAngleThreshold) && (currentPhase >= stepAngleThreshold))
-			PlaySound(pas);
-		prevPhase = currentPhase;
+				double elpst = GetTime();
+				int timer = 301 - (int)elpst;
+				int minute = timer / 60;
+				int seconde = timer % 60;
+				float vol1 = volume_of(camera, -2.7f, -4.6f);
+				float vol2 = volume_of(camera, 13.80f, -1.60f);
 
-		// Keyboard support
-        if (IsKeyDown(KEY_W)) CameraMoveForward(&camera, cameraMoveSpeed, 1);
-        if (IsKeyDown(KEY_A)) CameraMoveRight(&camera, -cameraMoveSpeed, 1);
-        if (IsKeyDown(KEY_S)) CameraMoveForward(&camera, -cameraMoveSpeed, 1);
-        if (IsKeyDown(KEY_D)) CameraMoveRight(&camera, cameraMoveSpeed, 1);
-		// Mouse support
-		Vector2 mousePositionDelta = GetMouseDelta();
-		CameraYaw(&camera, -mousePositionDelta.x*CAMERA_MOUSE_MOVE_SENSITIVITY, 0);
-		CameraPitch(&camera, -mousePositionDelta.y*CAMERA_MOUSE_MOVE_SENSITIVITY, 1, 0, 0);
-
-		// Check player collision (we simplify to 2D collision detection)
-		Vector2 playerPos = { camera.position.x, camera.position.z };
-		float playerRadius = 0.1f;  // Collision radius (player is modelled as a cilinder for collision)
-
-		int playerCellX = (int)(playerPos.x - mapPosition.x + 0.5f);
-		int playerCellY = (int)(playerPos.y - mapPosition.z + 0.5f);
-
-		// Out-of-limits security check
-		if (playerCellX < 0) playerCellX = 0;
-		else if (playerCellX >= cubicmap.width) playerCellX = cubicmap.width - 1;
-
-		if (playerCellY < 0) playerCellY = 0;
-		else if (playerCellY >= cubicmap.height) playerCellY = cubicmap.height - 1;
-
-		// Check map collisions using image data and player position
-		for (int y = 0; y < cubicmap.height; y++)
-		{
-			for (int x = 0; x < cubicmap.width; x++)
-			{
-				if ((mapPixels[y*cubicmap.width + x].r == 255) &&       // Collision: white pixel, only check R channel
-					(CheckCollisionCircleRec(playerPos, playerRadius,
-					(Rectangle){ mapPosition.x - 0.5f + x*1.0f, mapPosition.z - 0.5f + y*1.0f, 1.0f, 1.0f })))
+				// Update
+				//----------------------------------------------------------------------------------
+				SetSoundVolume(lev2, vol1 + 0.5);
+				SetSoundVolume(lev3, vol2);
+				SetSoundVolume(soupire, 1.5);
+				if ((int)elpst - decal == 10)
 				{
-					// Collision detected, reset camera position
-					camera.position = oldCamPos;
+					PlaySound(lev2);
+					PlaySound(lev3);
+					decal += 10;
 				}
+				if (IsKeyPressed(KEY_L)) {
+					// printf("posx: %0.2f, posy: %0.2f, posz: %0.2f\n", camera.position.x, camera.position.y, camera.position.z);
+					// printf("distance: %i\n", (int)Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {-2.7f, -4.6f}));
+					PlaySound(click);
+					if (light) light = false;
+					else light = true;
+				}
+				if ((int)elpst == 3) PlaySound(lev1);
+				if (minute <= 0)
+				{
+					if(seconde < 10)
+						timerColor = RED;
+					if (seconde <= 0)
+					{
+						minute = 0;
+						seconde = 0;
+					}
+				}
+
+				Vector3 oldCamPos = camera.position;    // Store old camera position
+
+				if (isMoving)
+				{
+					movingTime += dt;
+					if (movingTime >= 5.0f && !soupirePlayed)
+					{
+						PlaySound(soupire);
+						soupirePlayed = true;
+					}
+					bobbingTimer += dt * bobbingSpeed;
+					camera.position.y = baseCameraPos.y + sinf(bobbingTimer) * bobbingAmount;
+				} else {
+					// Reset when stopped
+					movingTime = 0.0f;
+					soupirePlayed = false;
+					bobbingTimer = 0;
+					camera.position.y = baseCameraPos.y;
+				}
+
+				float stepAngleThreshold = 3.14f / 2;   // approx π/2
+				float currentPhase = fmodf(bobbingTimer, 2 * 3.14159f);
+				float prevPhase = 0;  // à stocker également dans une variable statique ou globale
+				SetSoundVolume(pas, 0.6);
+				if ((prevPhase < stepAngleThreshold) && (currentPhase >= stepAngleThreshold))
+					PlaySound(pas);
+				prevPhase = currentPhase;
+
+				// Keyboard support
+				if (IsKeyDown(KEY_W)) CameraMoveForward(&camera, cameraMoveSpeed, 1);
+				if (IsKeyDown(KEY_A)) CameraMoveRight(&camera, -cameraMoveSpeed, 1);
+				if (IsKeyDown(KEY_S)) CameraMoveForward(&camera, -cameraMoveSpeed, 1);
+				if (IsKeyDown(KEY_D)) CameraMoveRight(&camera, cameraMoveSpeed, 1);
+				// Mouse support
+				Vector2 mousePositionDelta = GetMouseDelta();
+				CameraYaw(&camera, -mousePositionDelta.x*CAMERA_MOUSE_MOVE_SENSITIVITY, 0);
+				CameraPitch(&camera, -mousePositionDelta.y*CAMERA_MOUSE_MOVE_SENSITIVITY, 1, 0, 0);
+
+				// Check player collision (we simplify to 2D collision detection)
+				Vector2 playerPos = { camera.position.x, camera.position.z };
+				float playerRadius = 0.1f;  // Collision radius (player is modelled as a cilinder for collision)
+
+				int playerCellX = (int)(playerPos.x - mapPosition.x + 0.5f);
+				int playerCellY = (int)(playerPos.y - mapPosition.z + 0.5f);
+
+				// Out-of-limits security check
+				if (playerCellX < 0) playerCellX = 0;
+				else if (playerCellX >= cubicmap.width) playerCellX = cubicmap.width - 1;
+
+				if (playerCellY < 0) playerCellY = 0;
+				else if (playerCellY >= cubicmap.height) playerCellY = cubicmap.height - 1;
+
+				// Check map collisions using image data and player position
+				for (int y = 0; y < cubicmap.height; y++)
+				{
+					for (int x = 0; x < cubicmap.width; x++)
+					{
+						if ((mapPixels[y*cubicmap.width + x].r == 255) &&       // Collision: white pixel, only check R channel
+							(CheckCollisionCircleRec(playerPos, playerRadius,
+							(Rectangle){ mapPosition.x - 0.5f + x*1.0f, mapPosition.z - 0.5f + y*1.0f, 1.0f, 1.0f })))
+						{
+							// Collision detected, reset camera position
+							camera.position = oldCamPos;
+						}
+					}
+				}
+				//----------------------------------------------------------------------------------
+				// Draw
+				//----------------------------------------------------------------------------------
+				BeginDrawing();
+
+					ClearBackground(RAYWHITE);
+
+					BeginMode3D(camera);
+						DrawModel(model, mapPosition, 1.0f, WHITE);// Draw maze map
+					EndMode3D();
+
+					if (light) {
+						DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 200 });
+						DrawCircle(GetScreenWidth() / 2, GetScreenHeight(), 300, (Color) { 255, 244, 0, 15 });
+					}
+					else 
+						DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 240 });
+
+					DrawTextureEx(cubicmap, (Vector2){ GetScreenWidth() - cubicmap.width*4.0f - 20, 20.0f }, 0.0f, 4.0f, RED);
+					DrawRectangleLines(GetScreenWidth() - cubicmap.width*4 - 20, 20, cubicmap.width*4, cubicmap.height*4, DARKGREEN);
+
+					// Draw player position radar
+					DrawRectangle(GetScreenWidth() - cubicmap.width*4 - 20 + playerCellX*4, 20 + playerCellY*4, 4, 4, YELLOW);
+
+					DrawText(TextFormat("%02i:%02i", minute, seconde), 2, GetScreenHeight() - 30, 30, timerColor);
+
+				EndDrawing();
+				break;
+			}
+			case MENU:
+			{
+				Color textColor1 = RAYWHITE;
+				Color textColor2 = RAYWHITE;
+
+				if (on_start)
+				{
+					textColor1 = GOLD;
+					textColor2 = RAYWHITE;
+					if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN)) on_start = false;
+					if (IsKeyPressed(KEY_ENTER)) currentState = GAME;
+				}
+				else
+				{
+					textColor1 = RAYWHITE;
+					textColor2 = GOLD;
+					if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN)) on_start = true;
+					if (IsKeyPressed((KEY_ENTER)))
+					{
+						UnloadImageColors(mapPixels);   // Unload color array
+						UnloadTexture(cubicmap);        // Unload cubicmap texture
+						UnloadTexture(texture);         // Unload map texture
+						UnloadModel(model);             // Unload map model
+						UnloadMusicStream(bg_music);
+						UnloadSound(click);
+						UnloadSound(lev1);
+						UnloadSound(lev2);
+						UnloadSound(lev3);
+						UnloadSound(pas);
+						UnloadSound(soupire);
+
+						CloseAudioDevice();
+						CloseWindow();
+						return 0;
+					}
+				}
+				
+				BeginDrawing();
+					DrawTexture(menuText, 0, 0, WHITE);
+					DrawText("Hilalao", 100, 200, 20, textColor1);
+					DrawText("Hiala", 100, 250, 20, textColor2);
+				EndDrawing();
+				break;
 			}
 		}
-		//----------------------------------------------------------------------------------
-		// Draw
-		//----------------------------------------------------------------------------------
-		BeginDrawing();
-
-			ClearBackground(RAYWHITE);
-
-			BeginMode3D(camera);
-				DrawModel(model, mapPosition, 1.0f, WHITE);// Draw maze map
-			EndMode3D();
-
-			if (light) {
-				DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 200 });
-				DrawCircle(GetScreenWidth() / 2, GetScreenHeight(), 300, (Color) { 255, 244, 0, 15 });
-			}
-			else 
-				DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color) { 10, 10, 10, 240 });
-
-			DrawTextureEx(cubicmap, (Vector2){ GetScreenWidth() - cubicmap.width*4.0f - 20, 20.0f }, 0.0f, 4.0f, RED);
-			DrawRectangleLines(GetScreenWidth() - cubicmap.width*4 - 20, 20, cubicmap.width*4, cubicmap.height*4, DARKGREEN);
-
-			// Draw player position radar
-			DrawRectangle(GetScreenWidth() - cubicmap.width*4 - 20 + playerCellX*4, 20 + playerCellY*4, 4, 4, YELLOW);
-
-			DrawText(TextFormat("%02i:%02i", minute, seconde), 2, GetScreenHeight() - 30, 30, timerColor);
-			DrawFPS(10, 10);
-
-		EndDrawing();
-		//----------------------------------------------------------------------------------
 	}
 
+		
 	// De-Initialization
 	//--------------------------------------------------------------------------------------
 	UnloadImageColors(mapPixels);   // Unload color array
