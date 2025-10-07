@@ -18,7 +18,7 @@
 
 typedef enum { MENU, GAME, OVER, FINISH } GameState;
 
-static float volume_of(Camera camera, float x, float z);
+static float VolumeAtPosition(Vector3 camPos, float x, float z);
 
 //------------------------------------------------------------------------------------
 // Program main entry point
@@ -192,8 +192,8 @@ int main(void)
 		int timer = 300 - (int)elpst;
 		int minute = timer / 60;
 		int seconde = timer % 60;
-		float vol1 = volume_of(camera, -2.7f, -4.6f);
-		float vol2 = volume_of(camera, 13.80f, -1.60f);
+		float vol1 = VolumeAtPosition(camera.position, -2.7f, -4.6f);
+		float vol2 = VolumeAtPosition(camera.position, 13.80f, -1.60f);
 
 		SetSoundVolume(lev2, vol1 + 0.5);
 		SetSoundVolume(lev3, vol2);
@@ -509,8 +509,8 @@ int main(void)
             float rectX = (screenWidth * 0.51f) - (rectWidth / 2);
             float rectY = (screenHeight * 0.32f) - (rectHeight / 2);
 
-						DrawRectangle(rectX, rectY, rectWidth, rectHeight, DARKGRAY);
-						DrawRectangle(rectX + 5, rectY + 5, rectWidth - 10, rectHeight - 10, (Color) { 76, 63, 47, 200 });
+			DrawRectangle(rectX, rectY, rectWidth, rectHeight, DARKGRAY);
+			DrawRectangle(rectX + 5, rectY + 5, rectWidth - 10, rectHeight - 10, (Color) { 76, 63, 47, 200 });
 					
             int fontSize = screenWidth * 0.02f;
             int lineSpacing = fontSize + 10;
@@ -518,10 +518,10 @@ int main(void)
             DrawText("RANDRIA Luca", rectX + 10, rectY + 10, fontSize, RAYWHITE);
             DrawText("Tranon-dolo project 2025", rectX + 10, rectY + 10 + lineSpacing, fontSize * 0.7, RAYWHITE);
             DrawText("Press ENTER to leave this info", rectX + 10, rectY + 10 + 3 * lineSpacing, fontSize * 0.6, RAYWHITE);
-					}
-				EndDrawing();
-				break;
 			}
+			EndDrawing();
+			break;
+		}
       case (FINISH):
       {
         BeginDrawing();
@@ -547,10 +547,10 @@ int main(void)
 	UnloadSound(lev3);
 	UnloadSound(pas);
 	UnloadSound(soupire);
-  UnloadSound(dead);
-  UnloadSound(close);
-  UnloadTexture(doorTexture);
-  UnloadModel(doorModel);
+	UnloadSound(dead);
+	UnloadSound(close);
+	UnloadTexture(doorTexture);
+	UnloadModel(doorModel);
 
 	CloseAudioDevice();
 	CloseWindow();                  // Close window and OpenGL context
@@ -559,11 +559,9 @@ int main(void)
 	return 0;
 }
 
-static float volume_of(Camera camera, float x, float z)
+static float VolumeAtPosition(Vector3 camPos, float x, float z)
 {
-	float volume;
-	float dist = Vector2Distance((Vector2) {camera.position.x, camera.position.z},(Vector2) {x, z});
-	volume = 1 - (dist * 0.1);
-	if (volume < 0) volume = 0;
-	return (volume);
+	float dist = Vector2Distance((Vector2) {camPos.x, camPos.z},(Vector2) {x, z});
+	float volume = 1.f - dist * 0.1;
+	return (volume < 0.f ? 0.f : volume);
 }
