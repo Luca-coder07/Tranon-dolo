@@ -1,0 +1,333 @@
+Pour améliorer la maintenabilité du code fourni, voici plusieurs recommandations accompagnées d’une version refactorisée partielle du code, en séparant
+ les responsabilités, améliorant la lisibilité, réduisant la duplication, et clarifiant la structure globale.
+
+---
+
+### 1. **Organisation et séparation du code**
+
+- Découper le main en plusieurs fonctions plus petites avec des responsabilités claires : 
+  - initialisation (InitGame())
+  - mise à jour par état (UpdateGame(), UpdateMenu(), UpdateOver(), UpdateFinish())
+  - rendu par état (DrawGame(), DrawMenu(), etc.)
+  - chargement et déchargement des ressources (LoadResources(), UnloadResources())
+- Éviter une fonction main() trop longue (plus de 200 lignes), difficile à maintenir.
+
+---
+
+### 2. **Gestion des ressources**
+
+- Centraliser le chargement/déchargement dans des fonctions dédiées.
+- Encapsuler les ressources dans des structures pour mieux gérer leur cycle de vie.
+
+---
+
+### 3. **Utilisation des constantes et améliorations stylistiques**
+
+- Remplacer les magic number par des constantes descriptives.
+- Définir des structures pour Game ou GameState afin de passer les données facilement entre fonctions.
+- Éviter l’usage des variables static globales dispersées si possible.
+
+---
+
+### 4. **Clarifier les conditions**
+
+- Simplifier des conditions complexes dans les boucles et switchs.
+- Utiliser des fonctions pour tester les conditions d’interactions, collisions, etc.
+
+---
+
+### 5. **Commentaires et documentation**
+
+- Ajouter des commentaires clairs et concis sur les fonctions importantes.
+- Uniformiser la langue (français dans ce cas).
+
+---
+
+## Exemple de refactorisation partielle
+
+```c
+#include "raylib.h"
+#include "rcamera.h"
+#include "raymath.h"
+#include <stdlib.h>
+#include <time.h>
+#include <stdbool.h>
+
+#define CAMERA_MOUSE_SENSITIVITY 0.002f
+#define INTERACTION_DISTANCE 1.0f
+#define TORCH_MAX_BATTERY 120.0f
+#define GHOST_MAX_SCALE 2.0f
+#define PHRASE_DURATION 10.0f
+#define SCREEN_WIDTH 0  // Will be set later
+#define SCREEN_HEIGHT 0
+
+typedef enum { MENU, GAME, OVER, FINISH } GameState;
+
+// Struct to hold all game-related resources
+typedef struct {
+    Texture2D menuTexture;
+    Texture2D ghostTexture;
+    Texture2D bloodTexture;
+    Texture2D cubicmapTexture;
+    Texture2D doorTexture;
+
+    Model mapModel;
+    Model doorModel;
+
+    Color *mapPixels; // for collision detection
+
+    Music bgMusic;
+    Sound clickSound, stepSound, sighSound, deadSound, doorCloseSound;
+    Sound levelSound1, levelSound2, levelSound3;
+
+} Resources;
+
+typedef struct {
+    Camera camera;
+    Vector3 mapPosition;
+    Vector3 keyPosition;
+    Vector3 exitPosition;
+    bool hasKey;
+    bool lightOn;
+    float torchBattery;
+    float ghostScale;
+    double gameStartTime;
+    float phraseTimer;
+    int currentPhraseIndex;
+    Color timerColor;
+    bool timerFinished;
+    bool drawInfo;
+    int menuSelection;
+} GameStateData;
+
+static float VolumeAtPosition(Vector3 camPos, float x, float z) {
+    float dist = Vector2Distance((Vector2){camPos.x, camPos.z}, (Vector2){x, z});
+    float volume = 1.f - dist * 0.1f;
+    return volume < 0.f ? 0.f : volume;
+}
+
+// Function prototypes
+void InitGameState(GameStateData *gameState, int screenWidth, int screenHeight);
+void LoadResources(Resources *res);
+void UnloadResources(Resources *res);
+void UpdateGame(GameStateData *state, Resources *res, float dt, int screenWidth, int screenHeight, GameState *currentState);
+void DrawGame(GameStateData *state, Resources *res, int screenWidth, int screenHeight);
+void UpdateMenu(GameStateData *state, Resources *res, GameState *currentState, int screenWidth, int screenHeight);
+void DrawMenu(GameStateData *state, Resources *res, int screenWidth, int screenHeight);
+void UpdateOver(GameStateData *state, Resources *res);
+void DrawOver(GameStateData *state, Resources *res, int screenWidth, int screenHeight);
+void UpdateFinish(GameState *currentState);
+void DrawFinish(int screenWidth, int screenHeight);
+
+int main(void) {
+    // Configuration initiale
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_FULLSCREEN_MODE);
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tranon-dolo 3D");
+
+    int screenWidth = GetScreenWidth();
+    int screenHeight = GetScreenHeight();
+
+    InitAudioDevice();
+
+    Resources res = {0};
+    LoadResources(&res);
+
+    GameStateData gameState = {0};
+    InitGameState(&gameState, screenWidth, screenHeight);
+
+    GameState currentState = MENU;
+
+    SetTargetFPS(60);
+
+    while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
+        UpdateMusicStream(res.bgMusic);
+
+        switch(currentState) {
+            case MENU:
+                UpdateMenu(&gameState, &res, &currentState, screenWidth, screenHeight);
+                DrawMenu(&gameState, &res, screenWidth, screenHeight);
+                break;
+            case GAME:
+                UpdateGame(&gameState, &res, dt, screenWidth, screenHeight, &currentState);
+                DrawGame(&gameState, &res, screenWidth, screenHeight);
+                break;
+            case OVER:
+                UpdateOver(&gameState, &res);
+                DrawOver(&gameState, &res, screenWidth, screenHeight);
+                break;
+            case FINISH:
+                UpdateFinish(&currentState);
+                DrawFinish(screenWidth, screenHeight);
+                break;
+        }
+    }
+
+    UnloadResources(&res);
+
+    CloseAudioDevice();
+    CloseWindow();
+
+    return 0;
+}
+
+// Exemples d'implémentations de fonctions clés
+
+void InitGameState(GameStateData *gameState, int screenWidth, int screenHeight) {
+    gameState->camera.position = (Vector3){ -12.0f, 0.6f, -7.3f };
+    gameState->camera.target = (Vector3){ -11.55f, 1.4f, 6.85f };
+    gameState->camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    gameState->camera.fovy = 30.0f;
+    gameState->camera.projection = CAMERA_PERSPECTIVE;
+
+    gameState->mapPosition = (Vector3){ -16.0f, 0.0f, -8.0f };
+    gameState->exitPosition = (Vector3){ 11.0f, 0.5f, 6.5f };
+    gameState->hasKey = false;
+    gameState->lightOn = false;
+    gameState->torchBattery = TORCH_MAX_BATTERY;
+    gameState->ghostScale = 0.0f;
+    gameState->gameStartTime = 0.0;
+    gameState->phraseTimer = 0.0f;
+    gameState->currentPhraseIndex = 0;
+    gameState->timerColor = WHITE;
+    gameState->timerFinished = false;
+    gameState->drawInfo = false;
+    gameState->menuSelection = 1;
+}
+
+void LoadResources(Resources *res) {
+    Image menuImg = LoadImage("resources/screen.jpg");
+    res->menuTexture = LoadTextureFromImage(menuImg);
+    UnloadImage(menuImg);
+
+    Image ghostImg = LoadImage("resources/ghost.png");
+    res->ghostTexture = LoadTextureFromImage(ghostImg);
+    UnloadImage(ghostImg);
+
+    Image bloodImg = LoadImage("resources/blood.jpg");
+    res->bloodTexture = LoadTextureFromImage(bloodImg);
+    UnloadImage(bloodImg);
+
+    Image imMap = LoadImage("resources/cubicmap.png");
+    res->cubicmapTexture = LoadTextureFromImage(imMap);
+
+    Mesh mesh = GenMeshCubicmap(imMap, (Vector3){1.0f, 1.0f, 1.0f});
+    res->mapModel = LoadModelFromMesh(mesh);
+
+    Texture2D texture = LoadTexture("resources/cubicmap_atlas.png");
+    res->mapModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+
+    // Door
+    res->doorTexture = LoadTexture("resources/door.jpg");
+    Mesh doorMesh = GenMeshCube(1.0f, 1.0f, 0.1f);
+    res->doorModel = LoadModelFromMesh(doorMesh);
+    res->doorModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = res->doorTexture;
+
+    // Collision pixels
+    res->mapPixels = LoadImageColors(imMap);
+    UnloadImage(imMap);
+
+    // Sounds and music
+    res->bgMusic = LoadMusicStream("resources/bg_music.mp3");
+    PlayMusicStream(res->bgMusic);
+    SetMusicVolume(res->bgMusic, 0.2f);
+
+    res->clickSound = LoadSound("resources/click.ogg");
+    res->levelSound1 = LoadSound("resources/ALALANA AVY AIZA.mp3");
+    res->levelSound2 = LoadSound("resources/VONJEO.mp3");
+    res->levelSound3 = LoadSound("resources/MITADY HITSOAKA.mp3");
+    res->stepSound = LoadSound("resources/pas.mp3");
+    res->sighSound = LoadSound("resources/MISEFOSEFO.mp3");
+    res->deadSound = LoadSound("resources/dead.mp3");
+    res->doorCloseSound = LoadSound("resources/closedoorcreak.mp3");
+}
+
+void UnloadResources(Resources *res) {
+    UnloadImageColors(res->mapPixels);
+
+    UnloadTexture(res->menuTexture);
+    UnloadTexture(res->ghostTexture);
+    UnloadTexture(res->bloodTexture);
+    UnloadTexture(res->cubicmapTexture);
+    UnloadTexture(res->doorTexture);
+
+    UnloadTexture(res->mapModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture);
+    UnloadModel(res->mapModel);
+    UnloadModel(res->doorModel);
+
+    UnloadMusicStream(res->bgMusic);
+
+    UnloadSound(res->clickSound);
+    UnloadSound(res->levelSound1);
+    UnloadSound(res->levelSound2);
+    UnloadSound(res->levelSound3);
+    UnloadSound(res->stepSound);
+    UnloadSound(res->sighSound);
+    UnloadSound(res->deadSound);
+    UnloadSound(res->doorCloseSound);
+}
+
+// TODO: Implement UpdateGame, DrawGame, UpdateMenu, DrawMenu, UpdateOver, DrawOver, UpdateFinish, DrawFinish 
+// following the same idea: each focused on one responsibility and taking game state + resources as parameters.
+
+// Exemple pour DrawMenu() (protégé par UpdateMenu() pour la logique):
+
+void DrawMenu(GameStateData *state, Resources *res, int screenWidth, int screenHeight) {
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+
+    DrawTexturePro(res->menuTexture, (Rectangle){0, 0, res->menuTexture.width, res->menuTexture.height},
+                   (Rectangle){0, 0, screenWidth, screenHeight}, (Vector2){0, 0}, 0.0f, WHITE);
+
+    Color colors[3] = {RAYWHITE, RAYWHITE, RAYWHITE};
+    if (state->menuSelection >=1 && state->menuSelection <=3) {
+        colors[state->menuSelection - 1] = (state->menuSelection == 1) ? GOLD :
+                                          (state->menuSelection == 2) ? RED : GREEN;
+    }
+
+    DrawText("Hilalao", screenWidth * 0.12f, screenHeight * 0.45f, screenWidth * 0.02f, colors[0]);
+    DrawText("Hiala", screenWidth * 0.12f, screenHeight * 0.50f, screenWidth * 0.02f, colors[1]);
+    DrawText("Momba ny mpamorona", screenWidth * 0.12f, screenHeight * 0.8f, screenWidth * 0.015f, colors[2]);
+    DrawText("Casque/Ecouteur recommandé", screenWidth * 0.02f, screenHeight * 0.95f, screenWidth * 0.015f, RAYWHITE);
+
+    if (state->drawInfo) {
+        float rectWidth = screenWidth * 0.2f;
+        float rectHeight = screenHeight * 0.2f;
+        float rectX = (screenWidth * 0.51f) - (rectWidth / 2);
+        float rectY = (screenHeight * 0.32f) - (rectHeight / 2);
+
+        DrawRectangle(rectX, rectY, rectWidth, rectHeight, DARKGRAY);
+        DrawRectangle(rectX + 5, rectY + 5, rectWidth - 10, rectHeight - 10, (Color){76, 63, 47, 200});
+
+        int fontSize = screenWidth * 0.02f;
+        int lineSpacing = fontSize + 10;
+        DrawText("RANDRIA Luca", rectX + 10, rectY + 10, fontSize, RAYWHITE);
+        DrawText("Tranon-dolo project 2025", rectX + 10, rectY + 10 + lineSpacing, fontSize * 0.7f, RAYWHITE);
+        DrawText("Press ENTER to leave this info", rectX + 10, rectY + 10 + 3 * lineSpacing, fontSize * 0.6f, RAYWHITE);
+    }
+
+    EndDrawing();
+}
+```
+
+---
+
+### Résumé
+
+Cette approche modulaire :
+
+- Améliore la lisibilité en fragmentant les responsabilités.
+- Facilite le debug et l'extension du code.
+- Autorise à modifier ou tester une partie sans impacter l'ensemble.
+- Aide à réutiliser les ressources via la structure Resources.
+
+---
+
+### En pratique
+
+Suivre ces principes pour :
+
+- Implémenter toutes les autres fonctions (UpdateGame, UpdateMenu…).
+- Déplacer la logique lourde dans des fonctions auxiliaires dédiées (ex collision, interactions, gestion du timer).
+- Nettoyer au fur et à mesure les morceaux répétitifs.
+
