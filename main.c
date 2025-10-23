@@ -3,70 +3,9 @@
  * Autor: Luca RANDRIANIRINA
  * Made with Raylib 5
  */
-#include "raylib.h"
-#include "rcamera.h"
-#include "raymath.h"
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <stdio.h>
-#include <ctype.h>
 
-// Declaration of all globals variables
-#define CAMERA_MOUSE_SENSITIVITY 0.002f
-#define INTERACTION_DISTANCE 1.0f
-#define TORCH_MAX_BATTERY 120.0f
-#define GHOST_MAX_SCALE 2.0f
-#define PHRASE_DURATION 10.0f
-#define STORY_TEXT_MAX_LENGTH 2048
-#define MAX_WORDS 512
+#include "horror.h"
 
-Texture2D menuText;
-Texture2D ghostText;
-Texture2D bloodText;
-Texture2D cubicmap;
-Texture2D texture;
-Texture2D doorTexture;
-Model model;
-Model doorModel;
-Sound click, lev1, lev2, lev3, pas, soupire, dead, close;
-Music bg_music;
-Color *mapPixels;
-
-typedef enum
-{
-	MENU,
-  STORY,
-	GAME,
-  PAUSE,
-	OVER,
-	FINISH
-} GameState;
-
-const  char *storyText =
-   "Trano maizina tanteraka sy feno mistery no nifohazanao.\n\nTsy tsaroanao akory ny nahatongavanao tao.\n\n\n\n"
-   "Tokana ny zavatra fantatrao:\n\n"
-   "\tMisy fanalahidy miafina any ho any.\n\n\tNy fahitana izay fanalahidy izay no hany fanantenana hivoahana ao\n\nmialohan'ny hisehoan-javatra hafahafa na sanatria matotoa.\n\n\n\n"
-   "TANDREMO! Tsy ianao irery no ao. Maro ny fanahy voafatotra ao izay tsy manaiky ny hivoahanao.\n\n"
-   "Fohy ny fotoana ary ny segondra iray dia mampanantona anao amin'ny loza izay miha-mitombo.\n\n\n\n"
-   "Tadiavo ilay fanalahidy. Mitandrema. Areheto sy vonoy arak'izay hilàna azy ny jironao.\n\n"
-   "Henoy ny feo manodidina anao. Ary indrindra...AZA MITODIKA ANY AORINANAO.";
-
-int storyTextLength;
-int storyCurrentChar = 0;
-float storyTimeAccumulator = 0.0f;
-const float charDisplayTime = 0.03f; // 30 ms par caractère (ajustable)
-bool storyFullyDisplayed = false;
-
-static float VolumeAtPosition(Vector3 camPos, float x, float z)
-{
-	float dist = Vector2Distance((Vector2){camPos.x, camPos.z}, (Vector2){x, z});
-	float volume = 1.f - dist * 0.1;
-	return (volume < 0.f ? 0.f : volume);
-};
-
-void LoadResources(void);
-void UnloadResources(void);
 //------------------------------------------------------------------------------------
 // Program main entry point
 //------------------------------------------------------------------------------------
@@ -74,7 +13,10 @@ int main(void)
 {
 	// Initialization
 	//--------------------------------------------------------------------------------------
-	int screenWidth = 0;
+	t_res res;
+  t_hb hb;
+
+  int screenWidth = 0;
 	int screenHeight = 0;
 
 	GameState currentState = MENU;
@@ -86,7 +28,22 @@ int main(void)
 	SetExitKey(KEY_NULL);
 	InitAudioDevice();
 
-	LoadResources();
+	LoadResources(&res);
+  
+  const  char *storyText =
+   "Trano maizina tanteraka sy feno mistery no nifohazanao.\n\nTsy tsaroanao akory ny nahatongavanao tao.\n\n\n\n"
+   "Tokana ny zavatra fantatrao:\n\n"
+   "\tMisy fanalahidy miafina any ho any.\n\n\tNy fahitana izay fanalahidy izay no hany fanantenana hivoahana ao\n\nmialohan'ny hisehoan-javatra hafahafa na sanatria matotoa.\n\n\n\n"
+   "TANDREMO! Tsy ianao irery no ao. Maro ny fanahy voafatotra ao izay tsy manaiky ny hivoahanao.\n\n"
+   "Fohy ny fotoana ary ny segondra iray dia mampanantona anao amin'ny loza izay miha-mitombo.\n\n\n\n"
+   "Tadiavo ilay fanalahidy. Mitandrema. Areheto sy vonoy arak'izay hilàna azy ny jironao.\n\n"
+   "Henoy ny feo manodidina anao. Ary indrindra...AZA MITODIKA ANY AORINANAO.";
+
+  int storyTextLength;
+  int storyCurrentChar = 0;
+  float storyTimeAccumulator = 0.0f;
+  const float charDisplayTime = 0.03f; // 30 ms par caractère (ajustable)
+  bool storyFullyDisplayed = false;
 
 	// Define the camera to look into our 3d world
 	Camera camera = {0};
@@ -96,43 +53,26 @@ int main(void)
 	camera.fovy = 30.0f;							  // Camera field-of-view Y
 	camera.projection = CAMERA_PERSPECTIVE;			  // Camera projection type
 
-	Vector3 mapPosition = {-16.0f, 0.0f, -8.0f}; // Set model position
+  InitHeadBobbing(&hb, camera.position);
+	
+  Vector3 mapPosition = {-16.0f, 0.0f, -8.0f}; // Set model position
 
 	// Initialisation du graine aléatoire.
 	srand((unsigned int)time(NULL));
 
 	// Ajout de clé à trouver aléatoirement et du porte de sortie dans le jeu
 	Vector3 keyPosition = {0};
-	bool foundValidPos = false;
-
-	while (!foundValidPos)
-	{
-		// Genérer des coordonnées aléatoires dans les limites de la map
-		int x = rand() % cubicmap.width;
-		int y = rand() % cubicmap.height;
-
-		Color pixel = mapPixels[y * cubicmap.width + x];
-		if (pixel.r == 0) // Case libre (pas un mur)
-		{
-			// Position dans le monde : mapPosition.x + x, mapPosition.z + y
-			keyPosition.x = mapPosition.x + (float)x;
-			keyPosition.y = 0.0f;
-			keyPosition.z = mapPosition.z + (float)y;
-			foundValidPos = true;
-		}
-		// Sinon, réessayer une autre position
-	}
-
-	bool hasKey = false;
+  keyPosition = RandomizeKeyPosition(&res, mapPosition);
+ 
+  bool hasKey = false;
 	float doorOpenAngle = 0.0f;
 	bool doorOpening = false;
-	const float doorMaxOpenAngle = 90.0f;
-	const float doorOpenSpeed = 45.0f;
-	Vector3 exitPosition = {11.0f, 0.5f, 6.5f};
+	const float doorOpenSpeed = 40.0f;
+	Vector3 exitPosition = {11.0f, 0.5f, 6.4f};
 
 	bool light = false;
 
-	PlayMusicStream(bg_music);
+	PlayMusicStream(res.bg_music);
 
 	Color timerColor = WHITE;
 
@@ -150,19 +90,9 @@ int main(void)
 	//--------------------------------------------------------------------------------------
 
 	int decal = 0;
+  int decal2 = 0;
 
-	static float prevPhase = 0;
-
-	// Head Bobbing
-	float bobbingTimer = 0.0f;
-	float bobbingSpeed = 10.0f;
-	float bobbingAmount = 0.05f;
-
-	Vector3 baseCameraPos = camera.position;
-
-	static float movingTime = 0.0f;
-	static bool soupirePlayed = false;
-
+  // Menu
 	unsigned int on_what = 1;
 	bool draw_info = false;
 
@@ -183,54 +113,16 @@ int main(void)
 	// Main game loop
 	while (!WindowShouldClose()) // Detect window close button or ESC key
 	{
-		UpdateMusicStream(bg_music);
-		SetMusicVolume(bg_music, 0.2);
+		UpdateMusicStream(res.bg_music);
+		SetMusicVolume(res.bg_music, 0.2);
 		float dt = GetFrameTime();
 
 		switch (currentState)
 		{
       case STORY:
       {
-        if (!storyFullyDisplayed)
-        {
-          storyTimeAccumulator += dt;
-          while (storyTimeAccumulator >= charDisplayTime && storyCurrentChar < storyTextLength)
-          {
-            storyCurrentChar++;
-            storyTimeAccumulator -= charDisplayTime;
-          }
-          if (storyCurrentChar >= storyTextLength)
-          {
-            storyCurrentChar = storyTextLength;
-            storyFullyDisplayed = true;
-          }
-        }
-        if (IsKeyPressed(KEY_ENTER))
-        {
-          if (!storyFullyDisplayed)
-          {
-            storyCurrentChar = storyTextLength;
-            storyFullyDisplayed = true;
-          }
-          else
-          {
-            currentState = GAME;
-            gameStartTime = GetTime();
-            totalPauseDuration = 0.0;
-          }
-        }
-        BeginDrawing();
-        ClearBackground(BLACK);
-
-        char displayedText[STORY_TEXT_MAX_LENGTH] = { 0 };
-        strncpy(displayedText, storyText, storyCurrentChar);
-        displayedText[storyCurrentChar] = '\0';
-        DrawText(displayedText, 30, 50, 20, (Color){180, 180, 180, 255});
-        if (storyFullyDisplayed)
-          DrawText("Tsindrio ny ENTER raha hanomboka.", 10, screenHeight - 25, 15, RED);
-        else
-          DrawText("Tsindrio ny ENTER raha hampiseho hatramin'ny farany.", 10, screenHeight - 25, 15, RED);
-        EndDrawing();
+        UpdateAndDrawStory(storyText, storyTextLength, &storyCurrentChar, &storyTimeAccumulator, charDisplayTime, 
+                           &storyFullyDisplayed, screenWidth, screenHeight, &currentState, &gameStartTime, &totalPauseDuration);
         break;
       }
 			case GAME:
@@ -243,27 +135,28 @@ int main(void)
 					if (currentPhraseIndex >= phraseCount)
 						currentPhraseIndex = 0;
 				}
-				bool isMoving = (IsKeyDown(KEY_W) || IsKeyDown(KEY_A) || IsKeyDown(KEY_S) || IsKeyDown(KEY_D));
-				float cameraMoveSpeed = 1.5f * dt;
-
 				double elpst = GetTime() - gameStartTime - totalPauseDuration;
 				int timer = 300 - (int)elpst;
 				int minute = timer / 60;
 				int seconde = timer % 60;
-				float vol1 = VolumeAtPosition(camera.position, -2.7f, -4.6f);
+				
+        float vol1 = VolumeAtPosition(camera.position, -2.7f, -4.6f);
 				float vol2 = VolumeAtPosition(camera.position, 13.80f, -1.60f);
+        float keyVol = VolumeAtPosition(camera.position, keyPosition.x, keyPosition.z);
+        float pleurVol = VolumeAtPosition(camera.position, -15.3f, 6.4f);
+				SetSoundVolume(res.lev2, vol1 + 0.5);
+				SetSoundVolume(res.lev3, vol2);
+				SetSoundVolume(res.soupire, 1.5);
+				SetSoundVolume(res.click, 0.2);
+				SetSoundVolume(res.dead, 0.6);
+				SetSoundVolume(res.close, 0.8);
+        SetSoundVolume(res.keyPos, keyVol - 0.2);
+        SetSoundVolume(res.pleur, (pleurVol - 0.5f < 0.f) ? 0.f : (pleurVol - 0.5f));
 
-				SetSoundVolume(lev2, vol1 + 0.5);
-				SetSoundVolume(lev3, vol2);
-				SetSoundVolume(soupire, 1.5);
-				SetSoundVolume(click, 0.2);
-				SetSoundVolume(dead, 0.6);
-				SetSoundVolume(close, 0.8);
-
-				if (minute == 0)
+        if (minute == 0)
 				{
 					if (seconde == 1)
-						PlaySound(dead);
+						PlaySound(res.dead);
 					if (seconde == 0)
 						timerFinished = true;
 				}
@@ -288,33 +181,27 @@ int main(void)
 
 				// Centrer la texture
 				Vector2 screenCenter = {screenWidth / 2.0f + oscillateOffset, screenHeight / 2.0f + oscillateOffset};
-				Vector2 origin = {ghostText.width / 2.0f, ghostText.height / 2.0f};
-				Rectangle sourceRec = {0, 0, (float)ghostText.width, (float)ghostText.height};
-				Rectangle destRec = {screenCenter.x, screenCenter.y, ghostText.width * ghostScale, ghostText.height * ghostScale};
+				Vector2 origin = {res.ghostText.width / 2.0f, res.ghostText.height / 2.0f};
+				Rectangle sourceRec = {0, 0, (float)res.ghostText.width, (float)res.ghostText.height};
+				Rectangle destRec = {screenCenter.x, screenCenter.y, res.ghostText.width * ghostScale, res.ghostText.height * ghostScale};
 				Color ghostColor = (Color){255, 255, 255, (unsigned char)ghostAlpha};
 
 				if ((int)elpst - decal == 10)
 				{
-					PlaySound(lev2);
-					PlaySound(lev3);
+					PlaySound(res.lev2);
+					PlaySound(res.lev3);
+          PlaySound(res.pleur);
 					decal += 10;
 				}
-				if (IsKeyPressed(KEY_L))
-				{
-					PlaySound(click);
-					if (!light && torchBattery > 0)
-						light = true;
-					else
-						light = false;
-				}
-				if (light && torchBattery > 0.0f)
-					torchBattery -= dt;
-				if (torchBattery <= 0.0f)
-					light = false;
+        if ((int)elpst - decal2 == 15 && !hasKey)
+        {
+          PlaySound(res.keyPos);
+          decal2 += 15;
+        }
 				if ((int)elpst == 3)
-					PlaySound(lev1);
+					PlaySound(res.lev1);
 				if ((int)elpst == 0)
-					PlaySound(close);
+					PlaySound(res.close);
 				if (minute <= 0)
 				{
 					if (seconde < 10)
@@ -325,99 +212,10 @@ int main(void)
 						seconde = 0;
 					}
 				}
-				// Door openning animation
-				if (doorOpening && doorOpenAngle < doorMaxOpenAngle)
-				{
-					doorOpenAngle += doorOpenSpeed * dt;
-					if (doorOpenAngle >= doorMaxOpenAngle)
-					{
-						doorOpenAngle = doorMaxOpenAngle;
-						// Le joueur peut maintenant sortir, changer l'état du jeu
-            currentState = FINISH;
-					}
-        }
+        UpdateTorchLight(&light, &torchBattery, dt, res.click);
+        UpdateDoorOpening(&doorOpenAngle, &exitPosition, doorOpenSpeed, dt, doorOpening, &currentState);
+        UpdatePlayerMovementAndCamera(&camera, &hb, dt, mapPosition, &res, &currentState, &pauseStartTime);
 
-				Vector3 oldCamPos = camera.position; // Store old camera position
-
-				if (isMoving)
-				{
-					movingTime += dt;
-					if (movingTime >= 5.0f && !soupirePlayed)
-					{
-						PlaySound(soupire);
-						soupirePlayed = true;
-					}
-					bobbingTimer += dt * bobbingSpeed;
-					camera.position.y = baseCameraPos.y + sinf(bobbingTimer) * bobbingAmount;
-				}
-				else
-				{
-					// Reset when stopped
-					movingTime = 0.0f;
-					soupirePlayed = false;
-					bobbingTimer = 0;
-					camera.position.y = baseCameraPos.y;
-				}
-
-				float stepAngleThreshold = 3.14f / 2; // approx π/2
-				float currentPhase = fmodf(bobbingTimer, 2 * PI);
-				SetSoundVolume(pas, 0.6);
-				if ((prevPhase < stepAngleThreshold) && (currentPhase >= stepAngleThreshold))
-					PlaySound(pas);
-				prevPhase = currentPhase;
-
-				// Keyboard support
-				if (IsKeyDown(KEY_W))
-					CameraMoveForward(&camera, cameraMoveSpeed, 1);
-				if (IsKeyDown(KEY_A))
-					CameraMoveRight(&camera, -cameraMoveSpeed, 1);
-				if (IsKeyDown(KEY_S))
-					CameraMoveForward(&camera, -cameraMoveSpeed, 1);
-				if (IsKeyDown(KEY_D))
-					CameraMoveRight(&camera, cameraMoveSpeed, 1);
-
-				if (IsKeyPressed(KEY_ESCAPE))
-				{
-					currentState = PAUSE;
-					pauseStartTime = GetTime();
-				}
-				// Mouse support
-				Vector2 mousePositionDelta = GetMouseDelta();
-				CameraYaw(&camera, -mousePositionDelta.x * CAMERA_MOUSE_SENSITIVITY, 0);
-				CameraPitch(&camera, -mousePositionDelta.y * CAMERA_MOUSE_SENSITIVITY, 1, 0, 0);
-
-				// Check player collision (we simplify to 2D collision detection)
-				Vector2 playerPos = {camera.position.x, camera.position.z};
-				float playerRadius = 0.1f; // Collision radius (player is modelled as a cilinder for collision)
-
-				int playerCellX = (int)(playerPos.x - mapPosition.x + 0.5f);
-				int playerCellY = (int)(playerPos.y - mapPosition.z + 0.5f);
-
-				// Out-of-limits security check
-				if (playerCellX < 0)
-					playerCellX = 0;
-				else if (playerCellX >= cubicmap.width)
-					playerCellX = cubicmap.width - 1;
-
-				if (playerCellY < 0)
-					playerCellY = 0;
-				else if (playerCellY >= cubicmap.height)
-					playerCellY = cubicmap.height - 1;
-
-				// Check map collisions using image data and player position
-				for (int y = 0; y < cubicmap.height; y++)
-				{
-					for (int x = 0; x < cubicmap.width; x++)
-					{
-						if ((mapPixels[y * cubicmap.width + x].r == 255) && // Collision: white pixel, only check R channel
-							(CheckCollisionCircleRec(playerPos, playerRadius,
-													(Rectangle){mapPosition.x - 0.5f + x * 1.0f, mapPosition.z - 0.5f + y * 1.0f, 1.0f, 1.0f})))
-						{
-							// Collision detected, reset camera position
-							camera.position = oldCamPos;
-						}
-					}
-				}
 				//----------------------------------------------------------------------------------
 				// Draw
 				//----------------------------------------------------------------------------------
@@ -426,34 +224,23 @@ int main(void)
 				ClearBackground(RAYWHITE);
 
 				BeginMode3D(camera);
-				DrawModel(model, mapPosition, 1.0f, WHITE); // Draw maze map
-				DrawModelEx(doorModel, exitPosition, (Vector3){0.0f, 1.0f, 0.0f}, -doorOpenAngle, (Vector3){1.0f,1.0f,1.0f}, WHITE);
-			  if (!hasKey)
+				DrawModel(res.model, mapPosition, 1.0f, WHITE); // Draw maze map
+				DrawModelEx(res.doorModel, exitPosition, (Vector3){0.0f, 1.0f, 0.0f}, -doorOpenAngle, (Vector3){1.0f,1.0f,1.0f}, WHITE);
+			  DrawCubeV((Vector3) { 11.0f, 0.5f, 6.5f }, (Vector3) { 1.0f, 1.0f, 0.1f }, BLACK);
+        if (!hasKey)
 					DrawSphere(keyPosition, 0.05f, (Color){255, 203, 0, 200});
 				EndMode3D();
-				if (light && torchBattery > 0)
-				{
-					Vector2 lightPos = {screenWidth / 2, screenHeight * 0.9f};
-					float baseRadius = screenHeight * 0.6f;
-					float flicker = 1.0f + 0.05f * sinf(GetTime() * 20.0f);
+				
+        DrawTorchLightEffect(light, torchBattery, screenWidth, screenHeight);
 
-					DrawRectangle(0, 0, screenWidth, screenHeight, (Color){0, 0, 0, 245});
-					DrawCircleGradient(lightPos.x, lightPos.y, (baseRadius + (screenHeight * 0.25f)) * flicker, (Color){255, 200, 150, 40}, (Color){255, 200, 150, 0});
-					// Vignettage léger autour du centre de l'écran (ajuster si besoin)
-					float vignetteRadius = screenHeight * 1.5f;
-					Color vignetteColor = (Color){0, 0, 0, 100};
-					DrawCircleGradient(lightPos.x, lightPos.y, vignetteRadius + (screenHeight * 0.25f), (Color){0, 0, 0, 0}, vignetteColor);
-				}
-				else
-					DrawRectangle(0, 0, screenWidth, screenHeight, (Color){0, 0, 0, 245});
-				float distToKey = Vector3Distance(camera.position, keyPosition);
+        float distToKey = Vector3Distance(camera.position, keyPosition);
 				float distToExit = Vector3Distance(camera.position, exitPosition);
 				if (!hasKey && distToKey < INTERACTION_DISTANCE)
 				{
 					DrawText("Tsindrio ny E raha handray fanalahidy", 10, screenHeight - 60, 20, YELLOW);
 					if (IsKeyPressed(KEY_E))
 					{
-						PlaySound(click);
+						PlaySound(res.click);
 						hasKey = true;
 					}
 				}
@@ -463,43 +250,22 @@ int main(void)
 					DrawText("Tsindrio ny E raha hivoaka", 10, screenHeight - 60, 20, GREEN);
 					if (IsKeyPressed(KEY_E) && !doorOpening)
 					{
-						PlaySound(click);
+						PlaySound(res.click);
 						doorOpening = true;
 					}
 				}
 				else if (!hasKey && distToExit < INTERACTION_DISTANCE)
 					DrawText("Mihidy ity varavarana ity, tadiavo ny fanalahidy", 10, screenHeight - 60, 20, RED);
 
-				// DrawTextureEx(cubicmap, (Vector2){ screenWidth - cubicmap.width*4.0f - 20, 20.0f }, 0.0f, 4.0f, RED);
-				// DrawRectangleLines(screenWidth - cubicmap.width*4 - 20, 20, cubicmap.width*4, cubicmap.height*4, DARKGREEN);
-				//  Draw player position radar
-				// DrawRectangle(screenWidth - cubicmap.width*4 - 20 + playerCellX*4, 20 + playerCellY*4, 4, 4, YELLOW);
-
 				DrawText(phrases[currentPhraseIndex], 10, 10, 20, (Color){255, 255, 255, 120});
 
 				// Assombrir l'écran de plus en plus selon la taille du ghost
 				DrawRectangle(0, 0, screenWidth, screenHeight, (Color){0, 0, 0, (unsigned char)(ghostAlpha * 0.8f)});
-				DrawTexturePro(ghostText, sourceRec, destRec, origin, 0.0f, ghostColor);
+				DrawTexturePro(res.ghostText, sourceRec, destRec, origin, 0.0f, ghostColor);
 
 				DrawText(TextFormat("%02i:%02i", minute, seconde), 2, screenHeight - 30, 30, timerColor);
 
-				// Dessiner la jauge de batterie
-				int barWidth = 200;
-				int barHeight = 20;
-				int barX = screenWidth - barWidth - 10;
-				int barY = screenHeight - barHeight - 10;
-
-				DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-				float batteryRatio = torchBattery / TORCH_MAX_BATTERY;
-				bool lowBattery = batteryRatio < 0.3f;
-				Color barColor = lowBattery ? RED : GREEN;
-				if (lowBattery)
-				{
-					float pulse = (sinf(GetTime() * 10.0f) + 1) / 2;
-					barColor.a = (unsigned char)(255 * pulse);
-				}
-				DrawRectangle(barX, barY, (int)(barWidth * batteryRatio), barHeight, barColor);
-				DrawRectangleLines(barX, barY, barWidth, barHeight, BLACK);
+        DrawBatteryBar(torchBattery, screenWidth, screenHeight);
 
 				EndDrawing();
 				break;
@@ -516,17 +282,17 @@ int main(void)
 					currentState = MENU;
 					pauseStartTime = 0.0f;
 					totalPauseDuration = 0.0f;
-					StopMusicStream(bg_music);
-					PlayMusicStream(bg_music);
+					StopMusicStream(res.bg_music);
+					PlayMusicStream(res.bg_music);
 				}
 
 				BeginDrawing();
 				const char *pauseText = "MATAHOTRA ANGAHA!!!";
-				int textWidth = MeasureText(pauseText, 40);
-				DrawText(pauseText, screenWidth / 2 - textWidth / 2, screenHeight / 3, 40, RED);
-				const char *resumeText = "Tsindrio ny ENTER raha MAFY BE\n\n\t\t\t\tESC raha matahotra!";
-				int resumeWidth = MeasureText(resumeText, 20);
-				DrawText(TextFormat(resumeText), screenWidth / 2 - resumeWidth / 2, screenHeight / 2, 20, LIGHTGRAY);
+        DrawTextInCenterX(pauseText, screenHeight / 3, screenWidth, 40, RED, true);
+				const char *resumeText = "Tsindrio ny ENTER raha MAFY BE!";
+				const char *quitText = "ESC raha matahotra!";
+        DrawTextInCenterX(resumeText, screenHeight / 2, screenWidth, 20, LIGHTGRAY, true);
+        DrawTextInCenterX(quitText, screenHeight / 2 + 40, screenWidth, 20, LIGHTGRAY, true);
 				EndDrawing();
 				break;
 			}
@@ -534,22 +300,25 @@ int main(void)
 			{
 				float oscillateOffset = 5.0f * sinf(GetTime() * 15.0f);
 				Vector2 screenCenter = {screenWidth / 2.0f + oscillateOffset, screenHeight / 2.0f + oscillateOffset};
-				Vector2 origin = {ghostText.width / 2.0f, ghostText.height / 2.0f};
-				Rectangle sourceRec = {0, 0, (float)ghostText.width, (float)ghostText.height};
-				Rectangle destRec = {screenCenter.x, screenCenter.y, ghostText.width * GHOST_MAX_SCALE, ghostText.height * GHOST_MAX_SCALE};
+				Vector2 origin = {res.ghostText.width / 2.0f, res.ghostText.height / 2.0f};
+				Rectangle sourceRec = {0, 0, (float)res.ghostText.width, (float)res.ghostText.height};
+				Rectangle destRec = {screenCenter.x, screenCenter.y, res.ghostText.width * GHOST_MAX_SCALE, res.ghostText.height * GHOST_MAX_SCALE};
 				Color ghostColor = (Color){255, 255, 255, (unsigned char)255};
 
 				float bloodX = destRec.x + destRec.width / 2 - 300;
 				float bloodY = destRec.y;
-				Vector2 bloodOrigin = {bloodText.width / 2.0f, bloodText.height / 2.0f};
-				Rectangle bloodSourceRec = {0, 0, (float)bloodText.width, (float)bloodText.height};
-				Rectangle bloodDestRec = {bloodX, bloodY, (float)bloodText.width, (float)bloodText.height};
+				Vector2 bloodOrigin = {res.bloodText.width / 2.0f, res.bloodText.height / 2.0f};
+				Rectangle bloodSourceRec = {0, 0, (float)res.bloodText.width, (float)res.bloodText.height};
+				Rectangle bloodDestRec = {bloodX, bloodY, (float)res.bloodText.width, (float)res.bloodText.height};
 				Color bloodColor = WHITE;
+
+        if (IsKeyPressed(KEY_ENTER)) currentState = MENU;
 
 				BeginDrawing();
 				ClearBackground(BLACK);
-				DrawTexturePro(bloodText, bloodSourceRec, bloodDestRec, bloodOrigin, 0.0f, bloodColor);
-				DrawTexturePro(ghostText, sourceRec, destRec, origin, 0.0f, ghostColor);
+				DrawTexturePro(res.bloodText, bloodSourceRec, bloodDestRec, bloodOrigin, 0.0f, bloodColor);
+				DrawTexturePro(res.ghostText, sourceRec, destRec, origin, 0.0f, ghostColor);
+	      DrawTextInCenterX("Tsindrio ny ENTER raha hiverina any amin'ny MENU", screenHeight - (screenHeight * 0.02), screenWidth, screenHeight * 0.02, WHITE, true);
 				EndDrawing();
 				break;
 			}
@@ -564,99 +333,19 @@ int main(void)
 
 				light = false;
 				torchBattery = 120.0f;
+        hasKey = false;
+        doorOpening = false;
+        doorOpenAngle = 0.0f;
+        exitPosition = (Vector3){11.0f, 0.5f, 6.4f};
 
-				Color textColor1 = RAYWHITE;
-				Color textColor2 = RAYWHITE;
-				Color textColor3 = RAYWHITE;
+        keyPosition = RandomizeKeyPosition(&res, mapPosition);
 
-				if (IsKeyPressed(KEY_UP) && !draw_info)
-				{
-					if (on_what > 1)
-						on_what--;
-					else
-						on_what = 3;
-				}
-				else if (IsKeyPressed(KEY_DOWN) && !draw_info)
-				{
-					if (on_what < 3)
-						on_what++;
-					else
-						on_what = 1;
-				}
-
-				if (on_what == 1)
-				{
-					textColor1 = GOLD;
-					textColor2 = RAYWHITE;
-					textColor3 = RAYWHITE;
-					if (IsKeyPressed(KEY_ENTER))
-					{
-            storyCurrentChar = 0;
-            storyFullyDisplayed = false;
-						currentState = STORY;
-						gameStartTime = GetTime();
-					}
-				}
-				else if (on_what == 2)
-				{
-					textColor1 = RAYWHITE;
-					textColor2 = RED;
-					textColor3 = RAYWHITE;
-					if (IsKeyPressed((KEY_ENTER)))
-					{
-						UnloadResources();
-						CloseAudioDevice();
-						CloseWindow();
-						return 0;
-					}
-				}
-				else
-				{
-					textColor1 = RAYWHITE;
-					textColor2 = RAYWHITE;
-					textColor3 = GREEN;
-					if (IsKeyPressed((KEY_ENTER)))
-					{
-						if (draw_info == false)
-							draw_info = true;
-						else
-							draw_info = false;
-					}
-				}
-
-				BeginDrawing();
-				DrawTexturePro(menuText, (Rectangle){0, 0, menuText.width, menuText.height},
-							   (Rectangle){0, 0, screenWidth, screenHeight}, (Vector2){0, 0}, 0.0f, WHITE);
-				DrawText("Hilalao", screenWidth * 0.12, screenHeight * 0.45, screenWidth * 0.02, textColor1);
-				DrawText("Hiala", screenWidth * 0.12, screenHeight * 0.5, screenWidth * 0.02, textColor2);
-				DrawText("Momba ny mpamorona", screenWidth * 0.12, screenHeight * 0.8, screenWidth * 0.015, textColor3);
-				DrawText("Casque/Ecouteur recommandé", screenWidth * 0.02, screenHeight * 0.95, screenWidth * 0.015, RAYWHITE);
-				if (draw_info)
-				{
-					float rectWidth = screenWidth * 0.2f;
-					float rectHeight = screenHeight * 0.2f;
-					float rectX = (screenWidth * 0.51f) - (rectWidth / 2);
-					float rectY = (screenHeight * 0.32f) - (rectHeight / 2);
-
-					DrawRectangle(rectX, rectY, rectWidth, rectHeight, DARKGRAY);
-					DrawRectangle(rectX + 5, rectY + 5, rectWidth - 10, rectHeight - 10, (Color){76, 63, 47, 200});
-
-					int fontSize = screenWidth * 0.02f;
-					int lineSpacing = fontSize + 10;
-
-					DrawText("RANDRIA Luca", rectX + 10, rectY + 10, fontSize, RAYWHITE);
-					DrawText("Tranon-dolo project 2025", rectX + 10, rectY + 10 + lineSpacing, fontSize * 0.7, RAYWHITE);
-					DrawText("Press ENTER to leave this info", rectX + 10, rectY + 10 + 3 * lineSpacing, fontSize * 0.6, RAYWHITE);
-				}
-				EndDrawing();
+        UpdateAndDrawMenu(&res, screenWidth, screenHeight, &on_what, &draw_info, &currentState, &storyCurrentChar, &storyFullyDisplayed, &gameStartTime);
 				break;
 			}
 			case (FINISH):
 			{
-				BeginDrawing();
-				ClearBackground(BLACK);
-				DrawText("Eny Tafavoaka ianao", screenWidth * 0.2, screenHeight * 0.2, 30, RAYWHITE);
-				EndDrawing();
+        UpdateAndDrawFinish(screenWidth, screenHeight, res.cry, &currentState);
 				break;
 			}
 		}
@@ -664,78 +353,10 @@ int main(void)
 
 	// De-Initialization
 	//--------------------------------------------------------------------------------------
-	UnloadResources();
+	UnloadResources(&res);
 	CloseAudioDevice();
 	CloseWindow(); // Close window and OpenGL context
 	//--------------------------------------------------------------------------------------
 
 	return 0;
-}
-
-void LoadResources(void)
-{
-    Image menuImg = LoadImage("resources/screen.jpg");
-    menuText = LoadTextureFromImage(menuImg);
-    UnloadImage(menuImg);
-
-    Image ghostImg = LoadImage("resources/ghost.png");
-    ghostText = LoadTextureFromImage(ghostImg);
-    UnloadImage(ghostImg);
-
-    Image bloodImg = LoadImage("resources/blood.jpg");
-    bloodText = LoadTextureFromImage(bloodImg);
-    UnloadImage(bloodImg);
-
-    Image imMap = LoadImage("resources/cubicmap.png");
-    cubicmap = LoadTextureFromImage(imMap);
-
-    Mesh mesh = GenMeshCubicmap(imMap, (Vector3){1.0f, 1.0f, 1.0f});
-    model = LoadModelFromMesh(mesh);
-
-    texture = LoadTexture("resources/cubicmap_atlas.png");
-    model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
-
-    doorTexture = LoadTexture("resources/door.jpg");
-    Mesh doorMesh = GenMeshCube(1.0f, 1.0f, 0.1f);
-    doorModel = LoadModelFromMesh(doorMesh);
-    doorModel.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = doorTexture;
-
-    mapPixels = LoadImageColors(imMap);
-    UnloadImage(imMap);
-
-    bg_music = LoadMusicStream("resources/bg_music.mp3");
-
-    click = LoadSound("resources/click.ogg");
-    lev1 = LoadSound("resources/ALALANA AVY AIZA.mp3");
-    lev2 = LoadSound("resources/VONJEO.mp3");
-    lev3 = LoadSound("resources/MITADY HITSOAKA.mp3");
-    pas = LoadSound("resources/pas.mp3");
-    soupire = LoadSound("resources/MISEFOSEFO.mp3");
-    dead = LoadSound("resources/dead.mp3");
-    close = LoadSound("resources/closedoorcreak.mp3");
-}
-
-void UnloadResources(void)
-{
-    UnloadImageColors(mapPixels);
-    UnloadTexture(cubicmap);
-    UnloadTexture(texture);
-    UnloadModel(model);
-    UnloadTexture(doorTexture);
-    UnloadModel(doorModel);
-
-    UnloadMusicStream(bg_music);
-
-    UnloadSound(click);
-    UnloadSound(lev1);
-    UnloadSound(lev2);
-    UnloadSound(lev3);
-    UnloadSound(pas);
-    UnloadSound(soupire);
-    UnloadSound(dead);
-    UnloadSound(close);
-
-    UnloadTexture(menuText);
-    UnloadTexture(ghostText);
-    UnloadTexture(bloodText);
 }
