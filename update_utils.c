@@ -11,6 +11,8 @@ Vector3 RandomizeKeyPosition(t_res* res, Vector3 mapPosition) {
             if (pixel.r == 0) { // cell libre
                 freeCellCount++;
                 freeCells = realloc(freeCells, freeCellCount * sizeof(Cell));
+                if (freeCells == NULL)
+                    return (NULL);
                 freeCells[freeCellCount - 1] = (Cell){x, y};
             }
         }
@@ -23,6 +25,7 @@ Vector3 RandomizeKeyPosition(t_res* res, Vector3 mapPosition) {
         keyPos.z = mapPosition.z + freeCells[idx].y;
     }
     free(freeCells);
+    freeCells = NULL;
     return keyPos;
 }
 
